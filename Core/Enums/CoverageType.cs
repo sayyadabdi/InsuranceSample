@@ -1,6 +1,6 @@
 ﻿public enum CoverageType
 {
-    Surgery,
-    Dental,
-    Hospital
+    Surgery = 1,
+    Dental = 2,
+    Hospital = 3
 }

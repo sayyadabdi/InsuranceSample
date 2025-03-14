@@ -3,6 +3,7 @@ using Domain.Dtos;
 using EF.Services;
 using FluentValidation;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Domain.Commands
 {
@@ -29,11 +30,6 @@ namespace Domain.Commands
             {
                 x.RuleFor(x => x.Coverage).NotNull().IsInEnum();
                 x.RuleFor(x => x.Amount).NotNull().GreaterThan(0);
-
-                // CAN GET FROM DB TOO
-                x.RuleFor(x => x.Amount).GreaterThanOrEqualTo(5000).LessThanOrEqualTo(500000000).When(x => x.Coverage == CoverageType.Surgery);
-                x.RuleFor(x => x.Amount).GreaterThanOrEqualTo(4000).LessThanOrEqualTo(400000000).When(x => x.Coverage == CoverageType.Dental);
-                x.RuleFor(x => x.Amount).GreaterThanOrEqualTo(2000).LessThanOrEqualTo(200000000).When(x => x.Coverage == CoverageType.Hospital);
             });
         }
     }
@@ -46,11 +42,18 @@ namespace Domain.Commands
 
         public async Task<RequestDto> Handle(CreateRequestCommand request, CancellationToken cancellationToken)
         {
+            var coverages = _dbService.Coverages.AsNoTracking().ToDictionary(k => k.Type, v => v);
+
+            if (request.Coverages.Any(c => c.Amount < coverages[c.Coverage].Min || c.Amount > coverages[c.Coverage].Max))
+                throw new ValidationException("AMOUNT IS INVALID!");
+
             var r = new Request()
             {
-                // CAN USE EF CORE AUTO INCREMENT ID
-                Id = new Random().Next(0, int.MaxValue),
                 Title = request.Title,
+                EvaluationResult = new RequestEvaluation()
+                {
+                    Result = request.Coverages.Sum(c => c.Amount * coverages[c.Coverage].Coefficient)
+                },
                 Coverages = request.Coverages.Select(c => new RequestCoverage()
                 {
                     Amount = c.Amount,
@@ -66,6 +69,11 @@ namespace Domain.Commands
             {
                 Id = r.Id,
                 Title = r.Title,
+                EvaluationResult = new RequestEvaluationDto()
+                {
+                    Id = r.EvaluationResult.Id,
+                    Result = r.EvaluationResult.Result
+                },
                 Coverages = r.Coverages.Select(c => new RequestCoverageDto()
                 {
                     Amount = c.Amount,
